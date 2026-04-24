@@ -1,0 +1,495 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>도봉구 우체국 혼잡도 지도</title>
+
+<!-- Leaflet -->
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"/>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<!-- Chart.js -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<!-- Google Fonts -->
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+
+<style>
+  :root {
+    --bg: #f7f8fa;
+    --surface: #ffffff;
+    --border: #e2e6ec;
+    --primary: #c0392b;
+    --primary-soft: #fdecea;
+    --text: #1a1e2e;
+    --text-sub: #5a6478;
+    --low: #27ae60;
+    --mid: #e67e22;
+    --high: #e05a2b;
+    --peak: #c0392b;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: 'Noto Sans KR', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  /* ── 헤더 ── */
+  header {
+    background: var(--surface);
+    border-bottom: 2px solid var(--primary);
+    padding: 10px 20px;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    flex-shrink: 0;
+    z-index: 1000;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+  }
+  .header-icon {
+    font-size: 22px;
+  }
+  header h1 {
+    font-size: 16px;
+    font-weight: 700;
+    letter-spacing: -0.3px;
+    color: var(--text);
+  }
+  header p {
+    font-size: 11px;
+    color: var(--text-sub);
+    margin-top: 1px;
+  }
+  .legend {
+    margin-left: auto;
+    display: flex;
+    gap: 14px;
+    align-items: center;
+  }
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 11px;
+    color: var(--text-sub);
+  }
+  .legend-dot {
+    width: 10px; height: 10px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+
+  /* ── 지도 ── */
+  #map {
+    flex: 1;
+    width: 100%;
+  }
+
+  /* ── 팝업 ── */
+  .leaflet-popup-content-wrapper {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.12);
+    padding: 0;
+    min-width: 360px;
+  }
+  .leaflet-popup-tip {
+    background: var(--surface);
+    box-shadow: none;
+  }
+  .leaflet-popup-content {
+    margin: 0;
+    width: 100% !important;
+  }
+  .leaflet-popup-close-button {
+    color: var(--text-sub) !important;
+    font-size: 18px !important;
+    top: 8px !important;
+    right: 10px !important;
+  }
+
+  .popup-inner {
+    padding: 16px 18px 14px;
+  }
+  .popup-name {
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--text);
+    margin-bottom: 4px;
+  }
+  .popup-badge {
+    display: inline-block;
+    font-size: 10px;
+    padding: 2px 7px;
+    border-radius: 10px;
+    background: var(--primary-soft);
+    color: var(--primary);
+    border: 1px solid rgba(192,57,43,0.2);
+    margin-bottom: 12px;
+  }
+
+  /* 요일 탭 */
+  .day-tabs {
+    display: flex;
+    gap: 4px;
+    margin-bottom: 12px;
+  }
+  .day-tab {
+    flex: 1;
+    padding: 5px 0;
+    border: 1px solid var(--border);
+    background: var(--bg);
+    color: var(--text-sub);
+    font-family: 'Noto Sans KR', sans-serif;
+    font-size: 12px;
+    font-weight: 500;
+    border-radius: 5px;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .day-tab:hover {
+    background: var(--primary-soft);
+    color: var(--primary);
+    border-color: rgba(192,57,43,0.3);
+  }
+  .day-tab.active {
+    background: var(--primary);
+    color: #fff;
+    border-color: var(--primary);
+    font-weight: 700;
+  }
+
+  /* 차트 영역 */
+  .chart-wrap {
+    position: relative;
+    height: 180px;
+  }
+
+  /* 혼잡도 요약 */
+  .congestion-summary {
+    margin-top: 10px;
+    display: flex;
+    gap: 8px;
+  }
+  .summary-box {
+    flex: 1;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 6px 8px;
+    text-align: center;
+  }
+  .summary-label {
+    font-size: 10px;
+    color: var(--text-sub);
+    margin-bottom: 2px;
+  }
+  .summary-val {
+    font-family: 'DM Mono', monospace;
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--text);
+  }
+
+  /* 안내 */
+  .kml-notice {
+    position: absolute;
+    bottom: 12px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: rgba(255,255,255,0.92);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 8px 16px;
+    font-size: 11px;
+    color: var(--text-sub);
+    white-space: nowrap;
+    z-index: 900;
+    pointer-events: none;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="header-icon">📮</div>
+  <div>
+    <h1>도봉구 우체국·우편취급소 혼잡도</h1>
+    <p>카카오 시간대별 방문자 데이터 기반 · 평일(월~금) · 09:00–17:00</p>
+  </div>
+  <div class="legend">
+    <div class="legend-item"><div class="legend-dot" style="background:#4caf7d"></div>여유 (~40%)</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#f0b429"></div>보통 (40~65%)</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#e05a2b"></div>혼잡 (65~85%)</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#c0392b"></div>매우혼잡 (85%+)</div>
+  </div>
+</header>
+
+<div id="map"></div>
+<div class="kml-notice">📌 마커를 클릭하면 시간대별 혼잡도 차트가 표시됩니다</div>
+
+<script>
+// ────────────────────────────────────────────────
+//  혼잡도 데이터 (visitors_wide_pct.csv 기반)
+// ────────────────────────────────────────────────
+const CONGESTION_DATA = {
+  "11140190": {
+    "name": "방학2동우편취급국", "category": "우편취급국",
+    "lat": 37.6651, "lng": 127.0250,
+    "days": {
+      "월": {"9":43.1,"10":38.1,"11":27.9,"12":50.9,"13":39.5,"14":40.6,"15":75.3,"16":85.8,"17":50.4},
+      "화": {"9":27.8,"10":38.6,"11":37.0,"12":51.4,"13":39.9,"14":75.6,"15":67.4,"16":69.4,"17":21.2},
+      "수": {"9":26.3,"10":36.7,"11":34.5,"12":49.5,"13":30.2,"14":65.8,"15":72.6,"16":82.9,"17":35.2},
+      "목": {"9":40.6,"10":44.8,"11":54.6,"12":35.1,"13":60.0,"14":60.1,"15":88.4,"16":61.4,"17":21.7},
+      "금": {"9":25.1,"10":43.8,"11":50.9,"12":20.1,"13":37.9,"14":37.7,"15":39.7,"16":100.0,"17":45.2}
+    }
+  },
+  "19631657": {
+    "name": "서울쌍문2동우체국", "category": "우체국",
+    "lat": 37.6524, "lng": 127.0252,
+    "days": {
+      "월": {"9":64.5,"10":83.3,"11":95.2,"12":null,"13":82.0,"14":82.8,"15":85.4,"16":85.0,"17":97.5},
+      "화": {"9":67.0,"10":79.9,"11":57.1,"12":null,"13":50.4,"14":75.0,"15":59.5,"16":77.9,"17":67.5},
+      "수": {"9":63.9,"10":41.6,"11":59.5,"12":null,"13":64.6,"14":71.0,"15":62.6,"16":68.6,"17":54.4},
+      "목": {"9":59.8,"10":65.9,"11":71.8,"12":null,"13":100.0,"14":60.8,"15":74.8,"16":75.5,"17":84.3},
+      "금": {"9":55.6,"10":79.6,"11":62.9,"12":null,"13":56.8,"14":71.3,"15":75.7,"16":75.0,"17":56.0}
+    }
+  },
+  "23584453": {
+    "name": "서울도봉우체국", "category": "우체국",
+    "lat": 37.6484, "lng": 127.0471,
+    "days": {
+      "월": {"9":70.1,"10":66.3,"11":67.6,"12":56.3,"13":70.3,"14":87.6,"15":70.7,"16":81.4,"17":62.5},
+      "화": {"9":68.6,"10":60.5,"11":68.5,"12":42.9,"13":69.4,"14":74.0,"15":70.7,"16":89.9,"17":60.6},
+      "수": {"9":57.4,"10":66.2,"11":53.6,"12":49.6,"13":60.1,"14":70.4,"15":59.9,"16":78.8,"17":60.9},
+      "목": {"9":62.2,"10":48.1,"11":65.9,"12":54.9,"13":68.7,"14":63.5,"15":85.3,"16":75.8,"17":65.2},
+      "금": {"9":52.2,"10":63.7,"11":68.4,"12":54.5,"13":78.7,"14":59.4,"15":73.4,"16":100.0,"17":76.4}
+    }
+  },
+  "7834805": {
+    "name": "서울도봉1동우체국", "category": "우체국",
+    "lat": 37.6598, "lng": 127.0320,
+    "days": {
+      "월": {"9":49.4,"10":62.0,"11":85.7,"12":71.1,"13":88.9,"14":41.1,"15":54.9,"16":54.3,"17":24.9},
+      "화": {"9":59.1,"10":23.4,"11":35.4,"12":56.6,"13":51.4,"14":88.0,"15":89.7,"16":54.0,"17":36.3},
+      "수": {"9":45.4,"10":57.4,"11":46.0,"12":19.7,"13":37.4,"14":73.7,"15":63.7,"16":100.0,"17":35.4},
+      "목": {"9":45.7,"10":70.0,"11":34.0,"12":32.3,"13":61.7,"14":62.9,"15":52.3,"16":52.9,"17":59.7},
+      "금": {"9":47.4,"10":59.7,"11":71.7,"12":57.4,"13":63.7,"14":89.4,"15":68.0,"16":68.6,"17":40.3}
+    }
+  },
+  "7888015": {
+    "name": "서울방학동우체국", "category": "우체국",
+    "lat": 37.6717, "lng": 127.0174,
+    "days": {
+      "월": {"9":25.9,"10":77.8,"11":44.1,"12":null,"13":46.3,"14":29.8,"15":22.0,"16":30.2,"17":26.1},
+      "화": {"9":32.7,"10":42.0,"11":25.9,"12":null,"13":28.2,"14":28.8,"15":21.4,"16":38.6,"17":42.7},
+      "수": {"9":14.9,"10":100.0,"11":32.9,"12":null,"13":43.7,"14":35.5,"15":19.6,"16":28.4,"17":16.9},
+      "목": {"9":15.1,"10":57.8,"11":33.1,"12":null,"13":43.7,"14":35.7,"15":45.3,"16":45.7,"17":34.1},
+      "금": {"9":24.5,"10":59.0,"11":42.9,"12":null,"13":28.2,"14":38.0,"15":22.7,"16":48.4,"17":28.6}
+    }
+  },
+  "8102798": {
+    "name": "서울창5동우체국", "category": "우체국",
+    "lat": 37.6354, "lng": 127.0472,
+    "days": {
+      "월": {"9":38.7,"10":42.8,"11":38.2,"12":null,"13":36.3,"14":50.0,"15":50.9,"16":57.5,"17":49.6},
+      "화": {"9":46.3,"10":41.0,"11":37.1,"12":null,"13":44.7,"14":40.4,"15":40.9,"16":61.5,"17":40.3},
+      "수": {"9":34.9,"10":34.9,"11":40.3,"12":null,"13":47.8,"14":42.2,"15":48.4,"16":54.3,"17":43.5},
+      "목": {"9":36.3,"10":54.7,"11":40.1,"12":null,"13":34.0,"14":39.1,"15":40.6,"16":45.7,"17":44.1},
+      "금": {"9":32.2,"10":41.3,"11":32.1,"12":null,"13":59.4,"14":41.0,"15":43.5,"16":58.4,"17":100.0}
+    }
+  },
+  "9424850": {
+    "name": "서울쌍문한양우편취급국", "category": "우편취급국",
+    "lat": 37.6450, "lng": 127.0380,
+    "days": {
+      "월": {"9":60.9,"10":31.5,"11":85.9,"12":28.8,"13":58.2,"14":34.8,"15":57.1,"16":59.8,"17":76.1},
+      "화": {"9":58.7,"10":32.1,"11":39.1,"12":53.3,"13":58.2,"14":57.1,"15":56.0,"16":58.2,"17":26.1},
+      "수": {"9":58.2,"10":29.9,"11":37.5,"12":51.6,"13":31.5,"14":31.0,"15":53.8,"16":32.1,"17":51.1},
+      "목": {"9":54.9,"10":52.7,"11":80.4,"12":49.5,"13":53.8,"14":28.8,"15":76.6,"16":54.3,"17":73.9},
+      "금": {"9":54.9,"10":29.9,"11":29.9,"12":100.0,"13":56.0,"14":31.0,"15":33.2,"16":34.8,"17":28.8}
+    }
+  }
+};
+
+const HOURS = ["9","10","11","12","13","14","15","16","17"];
+const DAYS  = ["월","화","수","목","금"];
+
+// ── 혼잡도 → 색상 ──
+function congestionColor(v) {
+  if (v === null || v === undefined) return '#555';
+  if (v < 40)  return '#4caf7d';
+  if (v < 65)  return '#f0b429';
+  if (v < 85)  return '#e05a2b';
+  return '#c0392b';
+}
+
+// ── 마커 평균 혼잡도 계산 ──
+function avgCongestion(place) {
+  let sum = 0, cnt = 0;
+  for (const day of DAYS) {
+    for (const h of HOURS) {
+      const v = place.days[day]?.[h];
+      if (v !== null && v !== undefined) { sum += v; cnt++; }
+    }
+  }
+  return cnt ? sum / cnt : 0;
+}
+
+// ── 커스텀 마커 SVG ──
+function makeIcon(avg) {
+  const color = congestionColor(avg);
+  const svg = `<svg width="32" height="40" viewBox="0 0 32 40" xmlns="http://www.w3.org/2000/svg">
+    <path d="M16 0C7.16 0 0 7.16 0 16c0 12 16 24 16 24s16-12 16-24C32 7.16 24.84 0 16 0z" fill="${color}" stroke="white" stroke-width="2"/>
+    <text x="16" y="20" text-anchor="middle" dominant-baseline="middle" font-size="12" fill="white">📮</text>
+  </svg>`;
+  return L.divIcon({
+    html: svg,
+    className: '',
+    iconSize: [32, 40],
+    iconAnchor: [16, 40],
+    popupAnchor: [0, -40]
+  });
+}
+
+// ── 지도 초기화 ──
+const map = L.map('map', {
+  center: [37.655, 127.028],
+  zoom: 14,
+  zoomControl: true
+});
+
+L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
+  attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
+  subdomains: 'abcd',
+  maxZoom: 19
+}).addTo(map);
+
+// ── 차트 인스턴스 관리 ──
+let currentChart = null;
+
+function renderChart(canvasId, place, day) {
+  if (currentChart) { currentChart.destroy(); currentChart = null; }
+  const canvas = document.getElementById(canvasId);
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+
+  const vals  = HOURS.map(h => place.days[day]?.[h] ?? null);
+  const colors = vals.map(v => congestionColor(v));
+  const labels = HOURS.map(h => `${h}시`);
+
+  currentChart = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [{
+        data: vals,
+        backgroundColor: colors,
+        borderColor: colors,
+        borderWidth: 0,
+        borderRadius: 4,
+        borderSkipped: false
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            label: ctx => ctx.raw !== null ? `혼잡도 ${ctx.raw}%` : '데이터 없음'
+          },
+          backgroundColor: '#ffffff',
+          borderColor: '#e2e6ec',
+          borderWidth: 1,
+          titleColor: '#1a1e2e',
+          bodyColor: '#5a6478'
+        }
+      },
+      scales: {
+        x: {
+          ticks: { color: '#5a6478', font: { size: 11 } },
+          grid: { color: 'rgba(0,0,0,0.05)' }
+        },
+        y: {
+          min: 0, max: 100,
+          ticks: {
+            color: '#5a6478',
+            font: { size: 11 },
+            callback: v => v + '%'
+          },
+          grid: { color: 'rgba(0,0,0,0.06)' }
+        }
+      }
+    }
+  });
+}
+
+function updatePopup(pid, day) {
+  const place = CONGESTION_DATA[pid];
+  const vals  = HOURS.map(h => place.days[day]?.[h]).filter(v => v !== null && v !== undefined);
+  const avg   = vals.length ? (vals.reduce((a,b)=>a+b,0)/vals.length).toFixed(1) : '-';
+  const peak  = vals.length ? Math.max(...vals).toFixed(1) : '-';
+  const peakH = vals.length ? `${HOURS[vals.map((v,i)=>({v,i})).sort((a,b)=>b.v-a.v)[0].i]}시` : '-';
+
+  document.getElementById(`avg-${pid}`).textContent  = avg === '-' ? '-' : `${avg}%`;
+  document.getElementById(`peak-${pid}`).textContent = peak === '-' ? '-' : `${peak}%`;
+  document.getElementById(`peakh-${pid}`).textContent = peakH;
+
+  renderChart(`chart-${pid}`, place, day);
+
+  // 탭 활성화
+  document.querySelectorAll(`.day-tab[data-pid="${pid}"]`).forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.day === day);
+  });
+}
+
+// ── 마커 생성 ──
+for (const [pid, place] of Object.entries(CONGESTION_DATA)) {
+  const avg = avgCongestion(place);
+  const marker = L.marker([place.lat, place.lng], { icon: makeIcon(avg) }).addTo(map);
+
+  const popupHtml = `
+    <div class="popup-inner">
+      <div class="popup-name">${place.name}</div>
+      <div class="popup-badge">${place.category}</div>
+      <div class="day-tabs">
+        ${DAYS.map(d => `<button class="day-tab${d==='월'?' active':''}" data-pid="${pid}" data-day="${d}" onclick="updatePopup('${pid}','${d}')">${d}</button>`).join('')}
+      </div>
+      <div class="chart-wrap">
+        <canvas id="chart-${pid}"></canvas>
+      </div>
+      <div class="congestion-summary">
+        <div class="summary-box">
+          <div class="summary-label">평균 혼잡도</div>
+          <div class="summary-val" id="avg-${pid}">-</div>
+        </div>
+        <div class="summary-box">
+          <div class="summary-label">피크 혼잡도</div>
+          <div class="summary-val" id="peak-${pid}">-</div>
+        </div>
+        <div class="summary-box">
+          <div class="summary-label">피크 시간</div>
+          <div class="summary-val" id="peakh-${pid}">-</div>
+        </div>
+      </div>
+    </div>`;
+
+  marker.bindPopup(popupHtml, { maxWidth: 400 });
+
+  marker.on('popupopen', () => {
+    setTimeout(() => updatePopup(pid, '월'), 50);
+  });
+}
+</script>
+</body>
+</html>
